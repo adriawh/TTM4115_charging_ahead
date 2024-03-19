@@ -29,10 +29,12 @@ class Server:
         print('logging under name {}.'.format(__name__))
         self._logger.info('Starting Component')
 
-        # Create an instance of the queue
+        # Create an instance of the charging stations
 
-        self.queueObject = Queue()
-        self.queue = self.queueObject.queue
+        self.stations = {
+            1: Station(station_id=1, area_id=1, num_chargers=3),
+            2: Station(station_id=2, area_id=1, num_chargers=2)
+        }
 
         # Hold available chargers
         self.available_charger = 5
@@ -74,33 +76,42 @@ class Server:
             if command == 'status_available_charger':
                 s = ''
                 if payload.get('station_id'):
-                    s = f"There are {self.available_charger} available charger on station: {payload.get('station_id')}"
+                    station = self.stations.get(int(payload.get('station_id')))
+                    s = f"There are {station.available_chargers} available charger on station: {station.station_id}"
                 elif payload.get('area_id'):
-                    s = f"Here are the available chargers for {payload.get('area_id')}"
+                    stations_area = []
+                    for station in self.stations.values():
+                        if station.area_id == int(payload.get('area_id')):
+                            stations_area.append(station)
+
+                    s = f"There are {len(stations_area)} stations available in the area"
 
                 self.mqtt_client.publish(MQTT_TOPIC_OUTPUT, s)
             elif command == 'queue':
                 car_id = payload.get('car_id')
+                station = self.stations.get(int(payload.get('station_id')))
                 # Find queue
-                self._logger.debug(f"Length of the queue {len(self.queue)}")
 
-                if self.available_charger > 0:
+                if station.available_chargers > 0:
                     # Charger available. Return charger id
-                    s = 'Available charger.'
-                    self.available_charger -= 1
-
+                    s = 'You are assigned charger..'
+                    station.available_chargers -= 1
+                    self._logger.debug(f"There are {station.available_chargers} chargers left")
                 else:
-                    self.queueObject.add_to_queue(car_id)
+                    station.add_to_queue(car_id)
                     # No chargers are available. Return position in queue
-                    s = f'No chargers available, your position is {len(self.queue)})'
+                    s = f'No chargers available, your position is {len(station.queue)}'
 
                 self.mqtt_client.publish(MQTT_TOPIC_OUTPUT, s)
 
             elif command == 'charger_disconnected':
+                self._logger.debug(f"Charger has been disconnected")
                 charger_id = payload.get('charger_id')
-                if len(self.queue) > 0:
-                    new_id = self.queue.popleft()
+                station = self.stations.get(int(payload.get('station_id')))
+                if len(station.queue) > 0:
+                    new_id = station.queue.popleft()
                     s = f'Car {new_id} has been assigned charger {charger_id}'
+                    self._logger.debug(f"There length of the queue: {len(station.queue)}")
                     self.mqtt_client.publish(MQTT_TOPIC_OUTPUT, s)
                 else:
                     self._logger.debug(f"Charger {charger_id} available")
@@ -120,9 +131,13 @@ class Server:
         self.stm_driver.stop()
 
 
-class Queue:
-    def __init__(self):
+class Station:
+    def __init__(self, station_id, area_id, num_chargers):
+        self.station_id = station_id
+        self.area_id = area_id
         self.queue = deque()
+        self.num_chargers = num_chargers
+        self.available_chargers = num_chargers
 
     def add_to_queue(self, id):
         self.queue.append(id)
@@ -134,3 +149,13 @@ class Queue:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     server = Server()
+    """
+        charging_ahead/queue/command - {command: status_available_charger, station_id: 1} (expect 3)
+        charging_ahead/queue/command - {command: status_available_charger, area_id: 1} (expect 2)
+        charging_ahead/queue/command - {command: "queue", station_id: 1, car_id: 1} (expect 2 chargers left)
+        charging_ahead/queue/command - {command: "queue", station_id: 1, car_id: 2} (expect 1 charger left)
+        charging_ahead/queue/command - {command: "queue", station_id: 1, car_id: 3} (expect 0 charger left)
+        charging_ahead/queue/command - {command: "queue", station_id: 1, car_id: 4} (expect queue len 1)
+        charging_ahead/queue/command - {command: "charger_disconnected", station_id: 1 ,charger_id:1} (expect queue len 0)
+        charging_ahead/queue/command - {command: "charger_disconnected", station_id: 1 ,charger_id:1} (expect 1 available charger)
+    """
