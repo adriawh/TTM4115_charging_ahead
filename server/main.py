@@ -1,4 +1,6 @@
 import json
+import random
+
 import stmpy
 import logging
 from collections import deque
@@ -77,12 +79,11 @@ class Server:
 
         try:
             if command == 'status_available_charger':
-                s = ''
+                data = None
                 if payload.get('station_id'):
                     station = self.stations.get(int(payload.get('station_id')))
-                    s = f"There are {station.available_chargers} available charger on station: {station.station_id}"
+                    data = {'command': 'available_chargers', 'message': f"There are {station.available_chargers} available charger on station: {station.station_id}" }
                     self._logger.debug(f"There are {station.available_chargers} available charger on station: {station.station_id}")
-
 
                 elif payload.get('area_id'):
                     stations_area = []
@@ -90,32 +91,36 @@ class Server:
                         if station.area_id == int(payload.get('area_id')):
                             stations_area.append(station)
 
-                    s = f"There are {len(stations_area)} stations available in the area"
+                    data = {'command': 'available_chargers', 'message': f"There are {len(stations_area)} stations available in the area" }
                     self._logger.debug(f"There are {len(stations_area)} stations available in the area")
 
-                self.mqtt_client.publish(MQTT_TOPIC_OUTPUT, s)
-            elif command == 'queue':
+                self.mqtt_client.publish(MQTT_TOPIC_OUTPUT, json.dumps(data))
+
+            elif command == 'register_to_queue':
                 car_id = payload.get('car_id')
-                station = self.stations.get(int(payload.get('station_id')))
+                station = self.stations.get(payload.get('station_id'))
 
-                if car_id in station.queue:
-                    position = station.queue.index(
-                        car_id) + 1
-                    s = f'You are already in the queue, your position is {position}.'
-                    self._logger.debug(f'Car {car_id} is already in the queue, position {position}.')
+                if station.available_chargers > 0:
 
-                elif station.available_chargers > 0:
-                    # Charger available. Return charger id
-                    s = 'You are assigned charger..'
+                    charger_id = self.get_random_available_charger(station)
+
+                    data = {
+                        'command': 'charger_assigned', 'car_id': car_id, 'charger_id': charger_id
+                    }
                     station.available_chargers -= 1
+
+                    station.chargers[charger_id].car_id = car_id
+
                     self._logger.debug(f"There are {station.available_chargers} chargers left at station {station.station_id}")
                 else:
                     station.add_to_queue(car_id)
-                    # No chargers are available. Return position in queue
-                    s = f'No chargers available, your position is {len(station.queue)}'
+
+                    data = {
+                        'command': 'registered_in_queue', 'car_id': car_id, 'position': len(station.queue)
+                    }
                     self._logger.debug(f'No chargers available, your position is {len(station.queue)}')
 
-                self.mqtt_client.publish(MQTT_TOPIC_OUTPUT, s)
+                self.mqtt_client.publish(MQTT_TOPIC_OUTPUT, json.dumps(data))
 
                 dashboard_update = {
                     'action': 'queue_update',
@@ -125,18 +130,51 @@ class Server:
                 }
                 self.mqtt_client.publish(MQTT_TOPIC_DASHBOARD_UPDATE, json.dumps(dashboard_update))
 
-            elif command == 'charger_disconnected':
-                self._logger.debug(f"Charger has been disconnected")
+            elif command == 'unregister_from_queue':
+                car_id = payload.get('car_id')
+                station = self.stations.get(payload.get('station_id'))
+
+                station.remove_element(car_id)
+
+                self._logger.debug(f'car {car_id} is now removed from queue')
+
+                dashboard_update = {
+                    'station_id': station.station_id,
+                    'available_chargers': station.available_chargers,
+                    'queue_length': len(station.queue),
+                    #'assigned_chargers': station.chargers
+
+                }
+                self.mqtt_client.publish(MQTT_TOPIC_DASHBOARD_UPDATE, json.dumps(dashboard_update))
+
+            elif command == 'charger_disconnect':
+                car_id = payload.get('car_id')
                 charger_id = payload.get('charger_id')
                 station = self.stations.get(int(payload.get('station_id')))
+
+                station.chargers[charger_id].car_id = None
+                station.chargers[charger_id].charging = False
+
+                self._logger.debug(f"Charger {charger_id} has been disconnected from {car_id} and is now free")
+
                 if len(station.queue) > 0:
                     new_id = station.queue.popleft()
-                    s = f'Car {new_id} has been assigned charger {charger_id}'
-                    self._logger.debug(f"There length of the queue: {len(station.queue)}")
-                    self.mqtt_client.publish(MQTT_TOPIC_OUTPUT, s)
+                    self._logger.debug(f'Car {new_id} has been assigned charger {charger_id}')
+
+                    station.chargers[charger_id].car_id = car_id
+                    station.chargers[charger_id].charging = False
+
+                    data = {
+                        'command': 'charger_assigned', 'car_id': car_id, 'charger_id': charger_id
+                    }
+
                 else:
                     self._logger.debug(f"Charger {charger_id} available")
                     self.available_charger += 1
+
+
+                self.mqtt_client.publish(MQTT_TOPIC_OUTPUT, json.dumps(data))
+
 
                 dashboard_update = {
                     'action': 'charger_update',
@@ -144,13 +182,37 @@ class Server:
                     'available_chargers': station.available_chargers,
                     'queue_length': len(station.queue)
                 }
+
                 self.mqtt_client.publish(MQTT_TOPIC_DASHBOARD_UPDATE, json.dumps(dashboard_update))
 
-            #Add more checks as start_charging, stop_charging... Use the driver object and call the methods. Now the state Car state machine is independent.
-            #The server handles initalizaton of Car state machine objects, which means that the state machine itself does not have to communicate directly.
+            elif command == 'charger_connect':
+                charger_id = payload.get('charger_id')
+                station = self.stations.get(int(payload.get('station_id')))
+
+                self._logger.debug(f"Charger {charger_id} has been connected to car {station.chargers.get(charger_id).car_id}")
+                station.chargers[charger_id].charging = True
+
+                dashboard_update = {
+                    'station_id': station.station_id,
+                    'available_chargers': station.available_chargers,
+                    'queue_length': len(station.queue),
+                    #'assigned_chargers': station.chargers
+
+                }
+                self.mqtt_client.publish(MQTT_TOPIC_DASHBOARD_UPDATE, json.dumps(dashboard_update))
+
 
         except Exception as err:
             self._logger.error('Invalid arguments to command. {}'.format(err))
+
+    def get_random_available_charger(self, station):
+        charger = random.choice([
+            v for k, v in station.chargers.items() if not v.charging
+        ])
+
+        return charger.id
+
+
 
     def stop(self):
         """
@@ -170,6 +232,15 @@ class Station:
         self.queue = deque()
         self.num_chargers = num_chargers
         self.available_chargers = num_chargers
+        self.chargers = self.init_chargers()
+
+
+    def init_chargers(self):
+        chargers = dict()
+        for i in range(self.num_chargers):
+            chargers.update({i: Charger(i)})
+
+        return chargers
 
     def add_to_queue(self, id):
         self.queue.append(id)
@@ -177,6 +248,24 @@ class Station:
     def remove_from_queue(self):
         self.queue.popleft()
 
+
+    def remove_element(self, element):
+        new_dq = deque()
+        removed = False
+        for item in self.queue:
+            if item == element and not removed:
+                removed = True
+                continue
+            new_dq.append(item)
+        return new_dq
+
+
+class Charger:
+    def __init__(self, charger_id):
+        self.id = charger_id
+        self.car_id = None
+        self.operational = True
+        self.charging = False
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
