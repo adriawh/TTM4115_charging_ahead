@@ -5,6 +5,7 @@ from threading import Thread
 import json
 import random
 import string
+import keyboard
 
 
 # TODO: choose proper MQTT broker address
@@ -20,24 +21,28 @@ class CarStateMachine:
     def __init__(self, duration):
         self._logger = logging.getLogger(__name__)
         self.duration = duration
-        self.name = self.generate_random_id(10)
-
-
+        self.id = self.generate_random_id(10)
+        self.charger_id = None
+        
         self.client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION1)  # MQTTv311 corresponds to version 3.1.1
         self.client.on_connect = self.on_connect
         self.client.on_message = self.on_message
         self.client.connect(MQTT_BROKER, MQTT_PORT, 60)
 
         self.client.loop_start()
-
-        t0 = {'trigger': 'register', 'source': 'initial', 'target': 'in_queue', 'effect': 'register_for_queue'}
-        t1 = {'trigger': 'start_charging', 'source': 'in_queue', 'target': 'charging', 'effect': 'start_charging'}
-        t2 = {'trigger': 'stop_charging', 'source': 'charging', 'target': 'charge_complete', 'effect': 'stop_charging'}
-        t3 = {'trigger': 'disconnect', 'source': 'in_queue', 'target': 'disconnected', 'effect': 'disconnect'}
-        t4 = {'trigger': 'disconnect', 'source': 'charging', 'target': 'disconnected', 'effect': 'disconnect'}
-        t5 = {'trigger': 'disconnect', 'source': 'charge_complete', 'target': 'disconnected', 'effect': 'disconnect'}
-
-        self.stm = stmpy.Machine(name=self.name, transitions=[t0, t1, t2, t3, t4, t5], obj=self)
+        
+        transitions = [
+            {'source': 'initial', 'target': 'disconnected'},
+            {'trigger': 'register', 'source': 'disconnected', 'target': 'in_queue', 'effect': 'register_for_queue'},
+            {'trigger': 'assigned_charger', 'source': 'disconnected', 'target': 'assigned'},
+            {'trigger': 'unregister', 'source': 'in_queue', 'target': 'disconnected', 'effect': 'unregister_from_queue'},
+            {'trigger': 'charger_connected', 'source': 'in_queue', 'target': 'charging', 'effect': 'start_charging'},
+            {'trigger': 'charger_disconnected', 'source': 'charge_complete', 'target': 'disconnected', 'effect': 'disconnect'},
+            {'trigger': 'charger_disconnected', 'source': 'charging', 'target': 'disconnected', 'effect': 'disconnect'},
+            {'trigger': 'charge_complete', 'source': 'charging', 'target': 'charge_complete', 'effect': 'stop_charging'}
+        ]
+        
+        self.stm = stmpy.Machine(name=self.id, transitions=transitions, obj=self)
         self.stm_driver = stmpy.Driver()
         self.stm_driver.add_machine(self.stm)
         self.stm_driver.start(keep_active=True)
@@ -51,31 +56,57 @@ class CarStateMachine:
         payload = json.loads(msg.payload.decode('utf-8'))
         command = payload.get('command')
 
-        if command == 'start_engine':
-            self.stm.send('start_charging')
-        elif command == 'stop_engine':
-            self.stm.send('stop_charging')
+        if command == 'charger_assigned':
+            if payload.get('car_id') != self.id:
+                self.charger_id = payload.get('charger_id')
+                print('Charger assigned: {}'.format(self.charger_id))
+                self.stm_driver._stms_by_id.get(self.stm.id).send('assigned_charger')
+        elif command == 'registered_in_queue':
+            position = payload.get('position')
+            print('Position in queue: {}'.format(position))
+            
+        elif command == 'r':
+            self.stm_driver._stms_by_id.get(self.stm.id).send('register')
+            
         else:
             self._logger.warning('Unknown command: {}'.format(command))
 
-    def start_charging(self):
+    def charger_connected(self):
         print('Starting charging')
-        self.client.publish(MQTT_TOPIC_OUTPUT, 'Starting charging')
-        # Perform charging logic here
-
-    def stop_charging(self):
-        print('Stopping charging')
-        self.client.publish(MQTT_TOPIC_OUTPUT, 'Stopping charging')
-        # Perform stop charging logic here
-
-    def disconnect(self):
+        data = {
+            'command': 'charger_connected', 
+            'charger_id': self.charger_id, 
+            'station_id': 1,  
+        }
+        self.client.publish(MQTT_TOPIC_OUTPUT, json.dumps(data))
+        
+    def charger_disconnecd(self):
         print('Disconnecting')
-        self.client.publish(MQTT_TOPIC_OUTPUT, 'Disconnecting')
-        # Perform disconnect logic here
+        data = {
+            'command': 'charger_disconnected', 
+            'charger_id': self.charger_id, 
+            'station_id': 1,  
+        }
+        self.client.publish(MQTT_TOPIC_INPUT, json.dumps(data))
+        self.charger_id =  None
 
     def register_for_queue(self):
         print('Registering for queue')
-        self.client.publish("queue", "register")
+        data = {
+            'command': 'register_to_queue', 
+            'car_id': self.id, 
+            'station_id': 1, 
+        }
+        self.client.publish(MQTT_TOPIC_INPUT, json.dumps(data))
+    
+    def unregister_from_queue(self):
+        print('Unregistering from queue')
+        data = {
+            'command': 'unregister_from_queue', 
+            'car_id': self.id, 
+            'station_id': 1, 
+        }
+        self.client.publish(MQTT_TOPIC_INPUT, json.dumps(data))
         
     def generate_random_id(self, length):
             letters_and_digits = string.ascii_letters + string.digits
