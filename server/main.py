@@ -10,6 +10,8 @@ MQTT_PORT = 1883
 
 MQTT_TOPIC_INPUT = 'charging_ahead/queue/command'
 MQTT_TOPIC_OUTPUT = 'charging_ahead/queue/answer'
+MQTT_TOPIC_DASHBOARD_UPDATE = 'charging_ahead/dashboard/update'
+
 
 
 class Server:
@@ -35,6 +37,7 @@ class Server:
             1: Station(station_id=1, area_id=1, num_chargers=3),
             2: Station(station_id=2, area_id=1, num_chargers=2)
         }
+
 
         # Hold available chargers
         self.available_charger = 5
@@ -78,6 +81,9 @@ class Server:
                 if payload.get('station_id'):
                     station = self.stations.get(int(payload.get('station_id')))
                     s = f"There are {station.available_chargers} available charger on station: {station.station_id}"
+                    self._logger.debug(f"There are {station.available_chargers} available charger on station: {station.station_id}")
+
+
                 elif payload.get('area_id'):
                     stations_area = []
                     for station in self.stations.values():
@@ -85,24 +91,39 @@ class Server:
                             stations_area.append(station)
 
                     s = f"There are {len(stations_area)} stations available in the area"
+                    self._logger.debug(f"There are {len(stations_area)} stations available in the area")
 
                 self.mqtt_client.publish(MQTT_TOPIC_OUTPUT, s)
             elif command == 'queue':
                 car_id = payload.get('car_id')
                 station = self.stations.get(int(payload.get('station_id')))
-                # Find queue
 
-                if station.available_chargers > 0:
+                if car_id in station.queue:
+                    position = station.queue.index(
+                        car_id) + 1
+                    s = f'You are already in the queue, your position is {position}.'
+                    self._logger.debug(f'Car {car_id} is already in the queue, position {position}.')
+
+                elif station.available_chargers > 0:
                     # Charger available. Return charger id
                     s = 'You are assigned charger..'
                     station.available_chargers -= 1
-                    self._logger.debug(f"There are {station.available_chargers} chargers left")
+                    self._logger.debug(f"There are {station.available_chargers} chargers left at station {station.station_id}")
                 else:
                     station.add_to_queue(car_id)
                     # No chargers are available. Return position in queue
                     s = f'No chargers available, your position is {len(station.queue)}'
+                    self._logger.debug(f'No chargers available, your position is {len(station.queue)}')
 
                 self.mqtt_client.publish(MQTT_TOPIC_OUTPUT, s)
+
+                dashboard_update = {
+                    'action': 'queue_update',
+                    'station_id': station.station_id,
+                    'available_chargers': station.available_chargers,
+                    'queue_length': len(station.queue)
+                }
+                self.mqtt_client.publish(MQTT_TOPIC_DASHBOARD_UPDATE, json.dumps(dashboard_update))
 
             elif command == 'charger_disconnected':
                 self._logger.debug(f"Charger has been disconnected")
@@ -116,6 +137,17 @@ class Server:
                 else:
                     self._logger.debug(f"Charger {charger_id} available")
                     self.available_charger += 1
+
+                dashboard_update = {
+                    'action': 'charger_update',
+                    'station_id': station.station_id,
+                    'available_chargers': station.available_chargers,
+                    'queue_length': len(station.queue)
+                }
+                self.mqtt_client.publish(MQTT_TOPIC_DASHBOARD_UPDATE, json.dumps(dashboard_update))
+
+            #Add more checks as start_charging, stop_charging... Use the driver object and call the methods. Now the state Car state machine is independent.
+            #The server handles initalizaton of Car state machine objects, which means that the state machine itself does not have to communicate directly.
 
         except Exception as err:
             self._logger.error('Invalid arguments to command. {}'.format(err))
