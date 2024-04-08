@@ -7,7 +7,7 @@ GPIO.setwarnings(False)
 red = 4
 yellow = 22
 green = 9
-in_pin = 26
+in_pin = 19
 
 GPIO.setup(red, GPIO.OUT)
 GPIO.setup(yellow, GPIO.OUT)
