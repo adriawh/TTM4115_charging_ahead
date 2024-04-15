@@ -37,7 +37,7 @@ class Server:
 
         self.stations = {
             1: Station(station_id=1, area_id=1, num_chargers=3),
-            2: Station(station_id=2, area_id=1, num_chargers=2)
+            2: Station(station_id=2, area_id=1, num_chargers=3)
         }
 
         self._logger.debug('Connecting to MQTT broker {} at port {}'.format(MQTT_BROKER, MQTT_PORT))
@@ -193,7 +193,7 @@ class Server:
             self._logger.debug(f'Car {car_id} has been assigned charger {charger_id}')
 
             data = {
-                'command': 'charger_assigned', 'car_id': car_id, 'charger_id': charger_id
+                'command': 'charger_assigned', 'carId': car_id, 'chargerId': charger_id
             }
         else:
             self._logger.debug(f"Charger {charger_id} available")
@@ -233,9 +233,9 @@ class Server:
         station = self.stations.get(station_id)
         chargers = [charger.serialize() for charger in station.chargers.values()]
         dashboard_update = {
-            'station_id': station.id,
-            'available_chargers': station.available_chargers,
-            'unavailable_chargers': station.unavailable_chargers,
+            'id': station.id,
+            'availableChargers': station.available_chargers,
+            'unavailableChargers': station.unavailable_chargers,
             'queue': list(station.queue),
             'chargers': chargers
         }
@@ -247,11 +247,11 @@ class Server:
         for station in self.stations.values():
             chargers = [charger.serialize() for charger in station.chargers.values()]
             dashboard_update = {
-                'station_id': station.id,
-                'available_chargers': station.available_chargers,
-                'unavailable_chargers': station.unavailable_chargers,
+                'id': station.id,
+                'availableChargers': station.available_chargers,
+                'unavailableChargers': station.unavailable_chargers,
                 'queue': list(station.queue),
-                'queue_length': len(station.queue),
+                'queueLength': len(station.queue),
                 'chargers': chargers
             }
             data.append(dashboard_update)
