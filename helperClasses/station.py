@@ -5,11 +5,12 @@ from helperClasses.charger import Charger
 
 class Station:
     def __init__(self, station_id, area_id, num_chargers):
-        self.station_id = station_id
+        self.id = station_id
         self.area_id = area_id
         self.queue = deque()
         self.num_chargers = num_chargers
         self.available_chargers = num_chargers
+        self.unavailable_chargers = 0
         self.chargers = self.init_chargers()
 
     def init_chargers(self):
