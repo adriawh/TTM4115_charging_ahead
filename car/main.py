@@ -64,10 +64,6 @@ class CarStateMachine:
         elif command == 'registered_in_queue':
             position = payload.get('position')
             print('Position in queue: {}'.format(position))
-            
-        elif command == 'r':
-            self.stm_driver._stms_by_id.get(self.stm.id).send('register')
-            
         else:
             self._logger.warning('Unknown command: {}'.format(command))
 
