@@ -54,8 +54,7 @@ class Server:
         self.stm_driver.start(keep_active=True)
         self._logger.debug('Server initialization finished')
 
-        for station in self.stations.values():
-            self.update_dashboard(station.id)
+        self.init_dashboard()
 
     def on_connect(self, client, userdata, flags, rc):
         self._logger.debug('MQTT connected to {}'.format(client))
@@ -83,7 +82,6 @@ class Server:
 
             elif command == 'unregister_from_queue':
                 self.unregister_from_queue(payload)
-                self.update_dashboard(payload.get('station_id'))
 
             elif command == 'charger_disconnected':
                 data = self.charger_disconnected(payload)
@@ -111,7 +109,7 @@ class Server:
             if station is None:
                 self._logger.debug(f"No station exist with the id {payload.get('station_id')}")
                 data = {'command': 'available_chargers',
-                        'message':  f"No station exist with the id {payload.get('station_id')}"}
+                        'message': f"No station exist with the id {payload.get('station_id')}"}
             else:
                 data = {'command': 'available_chargers',
                         'message': f"There are {station.available_chargers} available charger on station: {station.id}"}
@@ -126,7 +124,7 @@ class Server:
             if len(stations_area) == 0:
                 self._logger.debug(f"No stations exist in the area with id: {payload.get('area_id')}")
                 data = {'command': 'available_chargers',
-                        'message':  f"No station exist with the id {payload.get('station_id')}"}
+                        'message': f"No station exist with the id {payload.get('station_id')}"}
             else:
                 data = {'command': 'available_chargers',
                         'message': f"There are {len(stations_area)} stations available in the area"}
@@ -169,6 +167,7 @@ class Server:
         station = self.stations.get(payload.get('station_id'))
 
         station.remove_element(car_id)
+        station.available_chargers += 1
 
         self._logger.debug(f'car {car_id} is now removed from queue')
 
@@ -238,11 +237,26 @@ class Server:
             'available_chargers': station.available_chargers,
             'unavailable_chargers': station.unavailable_chargers,
             'queue': list(station.queue),
-            'queue_length': len(station.queue),
             'chargers': chargers
         }
 
         self.mqtt_client.publish(MQTT_TOPIC_DASHBOARD_UPDATE, json.dumps(dashboard_update))
+
+    def init_dashboard(self):
+        data = []
+        for station in self.stations.values():
+            chargers = [charger.serialize() for charger in station.chargers.values()]
+            dashboard_update = {
+                'station_id': station.id,
+                'available_chargers': station.available_chargers,
+                'unavailable_chargers': station.unavailable_chargers,
+                'queue': list(station.queue),
+                'queue_length': len(station.queue),
+                'chargers': chargers
+            }
+            data.append(dashboard_update)
+
+        self.mqtt_client.publish(MQTT_TOPIC_DASHBOARD_UPDATE, json.dumps(data))
 
     def publish_command(self, command):
         payload = json.dumps(command)
