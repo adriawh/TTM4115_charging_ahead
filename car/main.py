@@ -6,6 +6,7 @@ import json
 import random
 import string
 import keyboard
+import RPi.GPIO as GPIO
 
 
 # TODO: choose proper MQTT broker address
@@ -16,6 +17,7 @@ MQTT_PORT = 1883
 MQTT_TOPIC_INPUT = 'charging_ahead/queue/command'
 MQTT_TOPIC_OUTPUT = 'charging_ahead/queue/answer'
 
+register_pin = 17
 
 class CarStateMachine:
     def __init__(self, duration):
@@ -35,7 +37,7 @@ class CarStateMachine:
             {'source': 'initial', 'target': 'disconnected'},
             {'trigger': 'register', 'source': 'disconnected', 'target': 'in_queue', 'effect': 'register_for_queue'},
             {'trigger': 'assigned_charger', 'source': 'disconnected', 'target': 'assigned'},
-            {'trigger': 'unregister', 'source': 'in_queue', 'target': 'disconnected', 'effect': 'unregister_from_queue'},
+            {'trigger': 'register', 'source': 'in_queue', 'target': 'disconnected', 'effect': 'unregister_from_queue'},
             {'trigger': 'charger_connected', 'source': 'in_queue', 'target': 'charging', 'effect': 'start_charging'},
             {'trigger': 'charger_disconnected', 'source': 'charge_complete', 'target': 'disconnected', 'effect': 'disconnect'},
             {'trigger': 'charger_disconnected', 'source': 'charging', 'target': 'disconnected', 'effect': 'disconnect'},
@@ -47,6 +49,10 @@ class CarStateMachine:
         self.stm_driver.add_machine(self.stm)
         self.stm_driver.start(keep_active=True)
 
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setup(register_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        GPIO.add_event_detect(register_pin, GPIO.FALLING, callback=self.button_press, bouncetime=500)
+
     def on_connect(self, client, userdata, flags, rc):
         print("Connected to MQTT broker with result code "+str(rc))
         client.subscribe(MQTT_TOPIC_OUTPUT)
@@ -57,16 +63,13 @@ class CarStateMachine:
         command = payload.get('command')
 
         if command == 'charger_assigned':
-            if payload.get('car_id') != self.id:
+            if payload.get('car_id') == self.id:
                 self.charger_id = payload.get('charger_id')
                 print('Charger assigned: {}'.format(self.charger_id))
                 self.stm_driver._stms_by_id.get(self.stm.id).send('assigned_charger')
         elif command == 'registered_in_queue':
             position = payload.get('position')
             print('Position in queue: {}'.format(position))
-            
-        elif command == 'r':
-            self.stm_driver._stms_by_id.get(self.stm.id).send('register')
             
         else:
             self._logger.warning('Unknown command: {}'.format(command))
@@ -111,6 +114,9 @@ class CarStateMachine:
     def generate_random_id(self, length):
             letters_and_digits = string.ascii_letters + string.digits
             return ''.join(random.choice(letters_and_digits) for _ in range(length))
+
+    def button_press(self, channel):
+        self.stm_driver._stms_by_id.get(self.stm.id).send('register')
 
 
 car_stm = CarStateMachine(10)
