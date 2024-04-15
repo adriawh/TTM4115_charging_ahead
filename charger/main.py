@@ -32,13 +32,13 @@ class Car_logic:
         self.client.loop_start()
         
         transitions = [
-            {'source': 'initial', 'target': 'waiting', 'effect': 'led(green)', 'effect': 'waiting'},
+            {'source': 'initial', 'target': 'waiting', 'effect': 'waiting'},
             {'trigger': 'failure', 'source': 'waiting', 'target':'out_of_order', 'effect': 'out_of_order'},
             {'trigger': 'start_service', 'source': 'out_of_order', 'target': 'under_service'},
-            {'trigger': 'finish_service', 'source': 'under_service', 'target': 'waiting'},
-            {'trigger': 'server_book', 'source': 'waiting', 'target': 'booked', 'effect': 'booked'},
-            {'trigger': 'charger_connected', 'source': 'booked', 'target': 'in_use', 'effect': 'in_use'},
-            {'trigger': 'charger_disconnected', 'source': 'in_use', 'target': 'waiting'},
+            {'trigger': 'finish_service', 'source': 'under_service', 'target': 'waiting', 'effect': 'waiting'},
+            {'trigger': 'server_book', 'source': 'waiting', 'target': 'booked'},
+            {'trigger': 'charger_connected', 'source': 'booked', 'target': 'in_use', 'effect': 'charger_connected'},
+            {'trigger': 'charger_disconnected', 'source': 'in_use', 'target': 'waiting', 'effect': 'effect'},
         ]
 
         self.stm = stmpy.Machine(name=self.name, transitions=transitions, obj=self)
@@ -57,46 +57,37 @@ class Car_logic:
         if command == 'charger_assigned':
             if payload.get('charger_id') != self.id:
                 self.car_id = payload.get('car_id')
-                print('Charger assigned: {}'.format(self.charger_id))
-                self.stm_driver._stms_by_id.get(self.stm.id).send('assigned_charger')
+                print('Charger assigned with car: {}'.format(self.car_id))
+                self.stm_driver._stms_by_id.get(self.stm.id).send('server_book')
         elif command == 'stop_engine':
             self.stm.send('stop_charging')
         else:
             self._logger.warning('Unknown command: {}'.format(command))
 
     def waiting(self):
-        pass
+        # TODO self.led("green")
+        data = {
+            'command': 'charger_available', 
+            'charger_id': self.id, 
+            'station_id': 1,  
+        }
+        self.client.publish(MQTT_TOPIC_INPUT, json.dumps(data))
        
-    def start_charging(self):
-        print("Starting charging")
-        # Perform charging logic here
-
-    def stop_charging(self):
-        print("Stopping charging")
-        # Perform stop charging logic here
-
-    def in_use(self):
-        print("In use")
-        # TODO Perform in use logic here
-        
-    def booked(self):
-        print("Booked")
-        # TODO Perform booked logic here
-        
+    def charger_connected(self):
+        # TODO led("red")
+        print("Charger connected")
+        data = {
+            'command': 'charger_connected', 
+            'charger_id': self.id, 
+            'station_id': 1,  
+        }
+        self.client.publish(MQTT_TOPIC_INPUT, json.dumps(data))
+    
     def out_of_order(self):
         print("Out of order")
-        # TODO Perform out of order logic here
-        
-    def disconnect(self):
-        print("Disconnecting")
-        
-        # json data to send to MQTT broker
-        
-        self.mqtt_client.publish("queue", "register")
-
-        # Perform disconnect logic here
-   
-    def register_for_queue(self):
-        print("Registering for queue")
-        self.mqtt_client.publish("queue", "register")
-        
+        data = {
+            'command': 'out_of_order', 
+            'charger_id': self.id, 
+            'station_id': 1,  
+        }
+        self.client.publish(MQTT_TOPIC_INPUT, json.dumps(data))
