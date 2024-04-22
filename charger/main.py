@@ -55,7 +55,10 @@ class charger_logic:
             {'trigger': 'charger_disconnected', 'source': 'in_use', 'target': 'waiting', 'effect': 'effect'},
         ]
 
-        self.stm = stmpy.Machine(name=self.name, transitions=transitions, obj=self)
+        self.stm = stmpy.Machine(name=self.id, transitions=transitions, obj=self)
+        self.stm_driver = stmpy.Driver()
+        self.stm_driver.add_machine(self.stm)
+        self.stm_driver.start(keep_active=True)
 
 
     def on_connect(self, client, userdata, flags, rc):
@@ -107,24 +110,31 @@ class charger_logic:
         }
         self.client.publish(MQTT_TOPIC_INPUT, json.dumps(data))
         
+    def generate_random_id(self, length):
+            letters_and_digits = string.ascii_letters + string.digits
+            return ''.join(random.choice(letters_and_digits) for _ in range(length))
+
     
-    def red_light():
+    def red_light(self):
         GPIO.output(red, GPIO.HIGH)
         GPIO.output(yellow, GPIO.LOW)
         GPIO.output(green, GPIO.LOW)
 
-    def yellow_light():
+    def yellow_light(self):
         GPIO.output(red, GPIO.LOW)
         GPIO.output(yellow, GPIO.HIGH)
         GPIO.output(green, GPIO.LOW)
 
-    def green_light():
+    def green_light(self):
         GPIO.output(red, GPIO.LOW)
         GPIO.output(yellow, GPIO.LOW)
         GPIO.output(green, GPIO.HIGH)
 
-    def off_light():
+    def off_light(self):
         GPIO.output(red, GPIO.LOW)
         GPIO.output(yellow, GPIO.LOW)
         GPIO.output(green, GPIO.LOW)
+        
+car_stm = charger_logic(10)
+
 

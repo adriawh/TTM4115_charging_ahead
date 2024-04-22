@@ -13,11 +13,13 @@ MQTT_BROKER = 'broker.hivemq.com'
 MQTT_PORT = 1883
 
 # TODO: choose proper topics for communication
-MQTT_TOPIC_INPUT = 'charging_ahead/queue/command'
-MQTT_TOPIC_OUTPUT = 'charging_ahead/queue/answer'
+MQTT_TOPIC_SERVER_INPUT = 'charging_ahead/queue/server_input'
+MQTT_TOPIC_SERVER_OUTPUT = 'charging_ahead/queue/server_output'
 
-register_pin = 17
-charger_pin = 27
+register_button = 17
+charger_pin = 21
+pulled_down_pin = 20
+
 
 class CarStateMachine:
     def __init__(self, duration):
@@ -40,7 +42,7 @@ class CarStateMachine:
             {'trigger': 'register', 'source': 'in_queue', 'target': 'disconnected', 'effect': 'unregister_from_queue'},
             {'trigger': 'charger_connected', 'source': 'in_queue', 'target': 'charging', 'effect': 'charger_connected'},
             {'trigger': 'charger_disconnected', 'source': 'charge_complete', 'target': 'disconnected', 'effect': 'disconnect'},
-            {'trigger': 'charger_disconnected', 'source': 'charging', 'target': 'disconnected', 'effect': 'disconnect'},
+            {'trigger': 'charger_disconnected', 'source': 'charging', 'target': 'disconnected'},
             {'trigger': 'charge_complete', 'source': 'charging', 'target': 'charge_complete', 'effect': 'stop_charging'}
         ]
 
@@ -50,14 +52,19 @@ class CarStateMachine:
         self.stm_driver.start(keep_active=True)
 
         GPIO.setmode(GPIO.BCM)
-        GPIO.setup(register_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        GPIO.setup(register_button, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        GPIO.add_event_detect(register_button, GPIO.FALLING, callback=self.button_press, bouncetime=500)
+
+        
+        
         GPIO.setup(charger_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.add_event_detect(register_pin, GPIO.FALLING, callback=self.button_press, bouncetime=500)
         GPIO.add_event_detect(charger_pin, GPIO.BOTH, callback=self.charger, bouncetime=500)
+
+        GPIO.setup(pulled_down_pin, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
 
     def on_connect(self, client, userdata, flags, rc):
         print("Connected to MQTT broker with result code "+str(rc))
-        client.subscribe(MQTT_TOPIC_OUTPUT)
+        client.subscribe(MQTT_TOPIC_SERVER_OUTPUT)
 
     def on_message(self, client, userdata, msg):
         print('Received message: {}'.format(msg.payload))
@@ -83,7 +90,7 @@ class CarStateMachine:
             'charger_id': self.charger_id,
             'station_id': 1,
         }
-        self.client.publish(MQTT_TOPIC_INPUT, json.dumps(data))
+        self.client.publish(MQTT_TOPIC_SERVER_INPUT, json.dumps(data))
         
     def charger_disconnecd(self):
         print('Disconnecting')
@@ -92,7 +99,7 @@ class CarStateMachine:
             'charger_id': self.charger_id,
             'station_id': 1,
         }
-        self.client.publish(MQTT_TOPIC_INPUT, json.dumps(data))
+        self.client.publish(MQTT_TOPIC_SERVER_INPUT, json.dumps(data))
         self.charger_id =  None
 
     def register_for_queue(self):
@@ -102,7 +109,7 @@ class CarStateMachine:
             'car_id': self.id,
             'station_id': 1,
         }
-        self.client.publish(MQTT_TOPIC_INPUT, json.dumps(data))
+        self.client.publish(MQTT_TOPIC_SERVER_INPUT, json.dumps(data))
 
     def unregister_from_queue(self):
         print('Unregistering from queue')
@@ -111,7 +118,7 @@ class CarStateMachine:
             'car_id': self.id,
             'station_id': 1,
         }
-        self.client.publish(MQTT_TOPIC_INPUT, json.dumps(data))
+        self.client.publish(MQTT_TOPIC_SERVER_INPUT, json.dumps(data))
 
     def generate_random_id(self, length):
             letters_and_digits = string.ascii_letters + string.digits
