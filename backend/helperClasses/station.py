@@ -1,6 +1,6 @@
 from collections import deque
 
-from helperClasses.charger import Charger
+from backend.helperClasses.charger import Charger
 
 
 class Station:

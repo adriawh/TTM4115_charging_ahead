@@ -6,9 +6,8 @@ import logging
 
 import paho.mqtt.client as mqtt
 
-from helperClasses import station
-from helperClasses.charger import Charger
-from helperClasses.station import Station
+from backend.helperClasses.charger import Charger
+from backend.helperClasses.station import Station
 
 MQTT_BROKER = 'broker.hivemq.com'
 MQTT_PORT = 1883
