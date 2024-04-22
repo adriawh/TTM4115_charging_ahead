@@ -4,9 +4,11 @@ from backend.helperClasses.charger import Charger
 
 
 class Station:
-    def __init__(self, station_id, area_id, num_chargers):
+    def __init__(self, station_id, area_id, station_name, area_name, num_chargers):
         self.id = station_id
         self.area_id = area_id
+        self.station_name = station_name
+        self.area_name = area_name
         self.queue = deque()
         self.num_chargers = num_chargers
         self.available_chargers = num_chargers

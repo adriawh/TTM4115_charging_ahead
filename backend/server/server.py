@@ -35,8 +35,10 @@ class Server:
         self._logger.info('Starting Component')
 
         self.stations = {
-            1: Station(station_id=1, area_id=1, num_chargers=3),
-            2: Station(station_id=2, area_id=1, num_chargers=3)
+            1: Station(station_id=1, area_id=1, station_name="Sluppen", area_name="Trondheim", num_chargers=4),
+            2: Station(station_id=2, area_id=1, station_name="Lade", area_name="Trondheim", num_chargers=4),
+            3: Station(station_id=3, area_id=2, station_name="Sandvika", area_name="Oslo", num_chargers=8),
+            4: Station(station_id=4, area_id=1, station_name="Øya", area_name="Trondheim", num_chargers=4)
         }
 
         self._logger.debug('Connecting to MQTT broker {} at port {}'.format(MQTT_BROKER, MQTT_PORT))
@@ -99,32 +101,38 @@ class Server:
             self._logger.error('Invalid arguments to command. {}'.format(err))
 
     def get_available_chargers(self, payload):
-        data = None
-        if payload.get('station_id'):
-            station = self.stations.get(int(payload.get('station_id')))
-            if station is None:
-                self._logger.debug(f"No station exist with the id {payload.get('station_id')}")
-                data = {'command': 'available_chargers',
-                        'message': f"No station exist with the id {payload.get('station_id')}"}
-            else:
-                data = {'command': 'available_chargers',
-                        'message': f"There are {self.get_num_available_chargers(station.id)} available charger on station: {station.id}"}
-                self._logger.debug(
-                    f"There are {self.get_num_available_chargers(station.id)} available charger on station: {station.id}")
-                print("Finished getting available chargers")
-        elif payload.get('area_id'):
-            stations_area = []
-            for station in self.stations.values():
-                if station.area_id == int(payload.get('area_id')):
-                    stations_area.append(station)
-            if len(stations_area) == 0:
-                self._logger.debug(f"No stations exist in the area with id: {payload.get('area_id')}")
-                data = {'command': 'available_chargers',
-                        'message': f"No station exist with the id {payload.get('station_id')}"}
-            else:
-                data = {'command': 'available_chargers',
-                        'message': f"There are {len(stations_area)} stations available in the area"}
-                self._logger.debug(f"There are {len(stations_area)} stations available in the area")
+        search_string = payload.get('search_string', '').lower()
+        data = {'command': 'available_chargers', 'message': 'No matching station or area found.'}
+
+        for station in self.stations.values():
+            if search_string in station.station_name.lower():
+                num_available = self.get_num_available_chargers(station.id)
+                data = {
+                    'command': 'available_chargers',
+                    'stations': [{
+                        'id': station.id,
+                        'name': station.station_name,
+                        'availableChargers': num_available,
+                        'queue': list(station.queue)
+                    }]
+                }
+                return data
+
+        matching_stations = []
+        for station in self.stations.values():
+            if search_string in station.area_name.lower() and self.get_num_available_chargers(station.id) > 0:
+                matching_stations.append({
+                    'id': station.id,
+                    'name': station.station_name,
+                    'availableChargers': self.get_num_available_chargers(station.id),
+                    'queue': list(station.queue)
+                })
+
+        if matching_stations:
+            data = {
+                'command': 'available_chargers',
+                'stations': matching_stations
+            }
 
         return data
 
