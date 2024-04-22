@@ -17,6 +17,7 @@ MQTT_TOPIC_INPUT = 'charging_ahead/queue/command'
 MQTT_TOPIC_OUTPUT = 'charging_ahead/queue/answer'
 
 register_pin = 17
+charger_pin = 27
 
 class CarStateMachine:
     def __init__(self, duration):
@@ -37,7 +38,7 @@ class CarStateMachine:
             {'trigger': 'register', 'source': 'disconnected', 'target': 'in_queue', 'effect': 'register_for_queue'},
             {'trigger': 'assigned_charger', 'source': 'disconnected', 'target': 'assigned'},
             {'trigger': 'register', 'source': 'in_queue', 'target': 'disconnected', 'effect': 'unregister_from_queue'},
-            {'trigger': 'charger_connected', 'source': 'in_queue', 'target': 'charging', 'effect': 'start_charging'},
+            {'trigger': 'charger_connected', 'source': 'in_queue', 'target': 'charging', 'effect': 'charger_connected'},
             {'trigger': 'charger_disconnected', 'source': 'charge_complete', 'target': 'disconnected', 'effect': 'disconnect'},
             {'trigger': 'charger_disconnected', 'source': 'charging', 'target': 'disconnected', 'effect': 'disconnect'},
             {'trigger': 'charge_complete', 'source': 'charging', 'target': 'charge_complete', 'effect': 'stop_charging'}
@@ -50,7 +51,9 @@ class CarStateMachine:
 
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(register_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        GPIO.setup(charger_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         GPIO.add_event_detect(register_pin, GPIO.FALLING, callback=self.button_press, bouncetime=500)
+        GPIO.add_event_detect(charger_pin, GPIO.BOTH, callback=self.charger, bouncetime=500)
 
     def on_connect(self, client, userdata, flags, rc):
         print("Connected to MQTT broker with result code "+str(rc))
@@ -80,8 +83,8 @@ class CarStateMachine:
             'charger_id': self.charger_id,
             'station_id': 1,
         }
-        self.client.publish(MQTT_TOPIC_OUTPUT, json.dumps(data))
-
+        self.client.publish(MQTT_TOPIC_INPUT, json.dumps(data))
+        
     def charger_disconnecd(self):
         print('Disconnecting')
         data = {
@@ -116,6 +119,14 @@ class CarStateMachine:
 
     def button_press(self, channel):
         self.stm_driver._stms_by_id.get(self.stm.id).send('register')
+
+    def charger(self, channel):
+        if GPIO.input(channel) == True:
+            self.stm_driver._stms_by_id.get(self.stm.id).send('charger_disconnected')
+            print("Charger unplugged")
+        else:
+            self.stm_driver._stms_by_id.get(self.stm.id).send('charger_connected')
+            print("Charger plugged")
 
 
 car_stm = CarStateMachine(10)

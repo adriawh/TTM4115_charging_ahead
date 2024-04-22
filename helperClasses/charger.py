@@ -9,7 +9,7 @@ class Charger:
     def serialize(self):
         return {
             'id': self.id,
-            'car_id': self.car_id,
+            'carId': self.car_id,
             'operational': self.operational,
             'charging': self.charging,
             'assigned': self.assigned
