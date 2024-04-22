@@ -5,7 +5,6 @@ from threading import Thread
 import json
 import random
 import string
-import keyboard
 import RPi.GPIO as GPIO
 
 

@@ -3,6 +3,7 @@ import stmpy
 import random
 import string
 import paho.mqtt.client as mqtt
+import RPi.GPIO as GPIO
 
 
 # TODO: choose proper MQTT broker address
@@ -16,12 +17,18 @@ MQTT_TOPIC_OUTPUT = 'charging_ahead/queue/answer'
 
 
 
-class Car_logic:
-    def __init__(self, duration, component):
+red = 4
+yellow = 22
+green = 9
+in_pin = 19
+
+
+
+class charger_logic:
+    def __init__(self, duration):
         
         self.id = self.generate_random_id(10)
         self.duration = duration
-        self.component = component
         self.car_id = None
         
         self.client = mqtt.Client(callback_api_version=mqtt.CallbackAPIVersion.VERSION1)  # MQTTv311 corresponds to version 3.1.1
@@ -30,6 +37,13 @@ class Car_logic:
         self.client.connect(MQTT_BROKER, MQTT_PORT, 60)
 
         self.client.loop_start()
+        
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setwarnings(False)
+        GPIO.setup(red, GPIO.OUT)
+        GPIO.setup(yellow, GPIO.OUT)
+        GPIO.setup(green, GPIO.OUT)
+        GPIO.setup(in_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         
         transitions = [
             {'source': 'initial', 'target': 'waiting', 'effect': 'waiting'},
@@ -65,7 +79,7 @@ class Car_logic:
             self._logger.warning('Unknown command: {}'.format(command))
 
     def waiting(self):
-        # TODO self.led("green")
+        self.green_light()
         data = {
             'command': 'charger_available', 
             'charger_id': self.id, 
@@ -74,7 +88,7 @@ class Car_logic:
         self.client.publish(MQTT_TOPIC_INPUT, json.dumps(data))
        
     def charger_connected(self):
-        # TODO led("red")
+        self.yellow_light()
         print("Charger connected")
         data = {
             'command': 'charger_connected', 
@@ -84,6 +98,7 @@ class Car_logic:
         self.client.publish(MQTT_TOPIC_INPUT, json.dumps(data))
     
     def out_of_order(self):
+        self.red_light()
         print("Out of order")
         data = {
             'command': 'out_of_order', 
@@ -91,3 +106,25 @@ class Car_logic:
             'station_id': 1,  
         }
         self.client.publish(MQTT_TOPIC_INPUT, json.dumps(data))
+        
+    
+    def red_light():
+        GPIO.output(red, GPIO.HIGH)
+        GPIO.output(yellow, GPIO.LOW)
+        GPIO.output(green, GPIO.LOW)
+
+    def yellow_light():
+        GPIO.output(red, GPIO.LOW)
+        GPIO.output(yellow, GPIO.HIGH)
+        GPIO.output(green, GPIO.LOW)
+
+    def green_light():
+        GPIO.output(red, GPIO.LOW)
+        GPIO.output(yellow, GPIO.LOW)
+        GPIO.output(green, GPIO.HIGH)
+
+    def off_light():
+        GPIO.output(red, GPIO.LOW)
+        GPIO.output(yellow, GPIO.LOW)
+        GPIO.output(green, GPIO.LOW)
+
