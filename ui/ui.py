@@ -9,8 +9,8 @@ from appJar import gui
 MQTT_BROKER = 'broker.hivemq.com'
 MQTT_PORT = 1883
 
-MQTT_TOPIC_INPUT = 'charging_ahead/queue/command'
-MQTT_TOPIC_OUTPUT = 'charging_ahead/queue/answer'
+MQTT_TOPIC_INPUT = 'charging_ahead/queue/server_input'
+MQTT_TOPIC_OUTPUT = 'charging_ahead/queue/server_output'
 
 
 class ChargingDetailsSenderComponent:
@@ -45,9 +45,11 @@ class ChargingDetailsSenderComponent:
 
     def on_message(self, client, userdata, msg):
         self._logger.debug('Incoming message to topic {}'.format(msg.topic))
+        print('YOOOOO')
 
         try:
             payload = json.loads(msg.payload.decode("utf-8"))
+            print("from ui", payload)
         except Exception as err:
             self._logger.error('Message sent to topic {} had no valid JSON. Message ignored. {}'.format(msg.topic, err))
             return
@@ -79,12 +81,12 @@ class ChargingDetailsSenderComponent:
 
         def on_button_pressed_status_area():
             area_id = self.app.getEntry("area_input")
-            command = {"command": "status_available_charger", "area_id": str(area_id)}
+            command = {"command": "status_available_charger", "area_id": area_id}
             publish_command(command)
 
         def on_button_pressed_status_station():
             station_id = self.app.getEntry("station_input")
-            command = {"command": "status_available_charger", "station_id": str(station_id)}
+            command = {"command": "status_available_charger", "station_id": station_id}
             publish_command(command)
 
         self.app.startLabelFrame('Adding cars to queue:')

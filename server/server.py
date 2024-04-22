@@ -13,8 +13,8 @@ from helperClasses.station import Station
 MQTT_BROKER = 'broker.hivemq.com'
 MQTT_PORT = 1883
 
-MQTT_TOPIC_INPUT = 'charging_ahead/queue/command'
-MQTT_TOPIC_OUTPUT = 'charging_ahead/queue/answer'
+MQTT_TOPIC_INPUT = 'charging_ahead/queue/server_input'
+MQTT_TOPIC_OUTPUT = 'charging_ahead/queue/server_output'
 MQTT_TOPIC_DASHBOARD_UPDATE = 'charging_ahead/dashboard/update'
 
 
@@ -75,6 +75,7 @@ class Server:
             if command == 'status_available_charger':
                 data = self.get_available_chargers(payload)
                 self.publish_command(data)
+                print("Finished publishing")
 
             elif command == 'register_to_queue':
                 data = self.register_to_queue(payload)
@@ -82,10 +83,6 @@ class Server:
 
             elif command == 'unregister_from_queue':
                 self.unregister_from_queue(payload)
-
-            elif command == 'charger_disconnected':
-                data = self.charger_disconnected(payload)
-                self.publish_command(data)
 
             elif command == 'charger_connected':
                 self.charger_connected(payload)
@@ -112,10 +109,10 @@ class Server:
                         'message': f"No station exist with the id {payload.get('station_id')}"}
             else:
                 data = {'command': 'available_chargers',
-                        'message': f"There are {station.available_chargers} available charger on station: {station.id}"}
+                        'message': f"There are {self.get_num_available_chargers(station.id)} available charger on station: {station.id}"}
                 self._logger.debug(
-                    f"There are {station.available_chargers} available charger on station: {station.id}")
-
+                    f"There are {self.get_num_available_chargers(station.id)} available charger on station: {station.id}")
+                print("Finished getting available chargers")
         elif payload.get('area_id'):
             stations_area = []
             for station in self.stations.values():
@@ -136,7 +133,7 @@ class Server:
         car_id = payload.get('car_id')
         station = self.stations.get(payload.get('station_id'))
 
-        if station.available_chargers > 0:
+        if self.get_num_available_chargers(station.id) > 0:
 
             charger_id = self.get_random_available_charger(station)
 
@@ -148,10 +145,8 @@ class Server:
             charger.car_id = car_id
             charger.assigned = True
 
-            station.available_chargers -= 1
-
             self._logger.debug(
-                f"There are {station.available_chargers} chargers left at station {station.id}")
+                f"There are { self.get_num_available_chargers(station.id)} chargers left at station {station.id}")
         else:
             station.add_to_queue(car_id)
 
@@ -167,39 +162,8 @@ class Server:
         station = self.stations.get(payload.get('station_id'))
 
         station.remove_element(car_id)
-        station.available_chargers += 1
 
         self._logger.debug(f'car {car_id} is now removed from queue')
-
-    def charger_disconnected(self, payload):
-        charger_id = payload.get('charger_id')
-        station = self.stations.get(int(payload.get('station_id')))
-        car_id = station.chargers[charger_id].car_id
-        charger = station.chargers[charger_id]
-        charger.car_id = None
-        charger.charging = False
-        charger.assigned = False
-
-        self._logger.debug(f"Charger {charger_id} has been disconnected from {car_id} and is now free")
-
-        if len(station.queue) > 0:
-            car_id = station.queue.popleft()
-            charger_id = self.get_random_available_charger(station)
-
-            charger = station.chargers[charger_id]
-            charger.car_id = car_id
-            charger.assigned = True
-
-            self._logger.debug(f'Car {car_id} has been assigned charger {charger_id}')
-
-            data = {
-                'command': 'charger_assigned', 'carId': car_id, 'chargerId': charger_id
-            }
-        else:
-            self._logger.debug(f"Charger {charger_id} available")
-            station.available_chargers += 1
-
-        return data
 
     def charger_connected(self, payload):
         charger_id = payload.get('charger_id')
@@ -217,24 +181,49 @@ class Server:
         if charger_id not in station.chargers:
             charger = Charger(charger_id)
             station.chargers.update({charger_id: charger})
-        else:
-            charger = station.chargers[payload.get('charger_id')]
-            charger.operational = True
 
-        station.available_chargers += 1
+        charger = station.chargers[charger_id]
+        charger.operational = True
+
+        car_id = station.chargers[charger_id].car_id
+
+        if car_id is not None:
+            self._logger.debug(f"Charger {charger_id} has been disconnected from {car_id} and is now free")
+            charger.car_id = None
+            charger.charging = False
+            charger.assigned = False
+
+        if len(station.queue) > 0:
+
+            car_id = station.queue.popleft()
+            charger_id = self.get_random_available_charger(station)
+
+            charger = station.chargers[charger_id]
+            charger.car_id = car_id
+            charger.assigned = True
+
+            self._logger.debug(f'Car {car_id} has been assigned charger {charger_id}')
+
+            data = {
+                'command': 'charger_assigned', 'car_id': car_id, 'charger_id': charger_id, 'queue': list(station.queue)
+            }
+
+            self.publish_command(data)
 
     def charger_out_of_order(self, payload):
         station = self.stations.get(payload.get('station_id'))
         charger = station.chargers[payload.get('charger_id')]
         charger.operational = False
-        station.unavailable_chargers -= 1
 
     def update_dashboard(self, station_id):
-        station = self.stations.get(station_id)
+        print('updating dashboard')
+        print(self.stations)
+        station = self.stations.get(int(station_id))
+        print("STATION", station)
         chargers = [charger.serialize() for charger in station.chargers.values()]
         dashboard_update = {
             'id': station.id,
-            'availableChargers': station.available_chargers,
+            'availableChargers':  self.get_num_available_chargers(station.id),
             'unavailableChargers': station.unavailable_chargers,
             'queue': list(station.queue),
             'chargers': chargers
@@ -248,7 +237,7 @@ class Server:
             chargers = [charger.serialize() for charger in station.chargers.values()]
             dashboard_update = {
                 'id': station.id,
-                'availableChargers': station.available_chargers,
+                'availableChargers': self.get_num_available_chargers(station.id),
                 'unavailableChargers': station.unavailable_chargers,
                 'queue': list(station.queue),
                 'queueLength': len(station.queue),
@@ -260,6 +249,7 @@ class Server:
 
     def publish_command(self, command):
         payload = json.dumps(command)
+        print("server", payload)
         self.mqtt_client.publish(MQTT_TOPIC_OUTPUT, payload=payload)
 
     def get_random_available_charger(self, station):
@@ -268,6 +258,14 @@ class Server:
         ])
 
         return charger.id
+
+    def get_num_available_chargers(self, station_id):
+        station = self.stations.get(station_id)
+        available_chargers = 0
+        for charger in station.chargers.values():
+            if not charger.assigned and charger.operational:
+                available_chargers += 1
+        return available_chargers
 
     def stop(self):
         self.mqtt_client.loop_stop()
