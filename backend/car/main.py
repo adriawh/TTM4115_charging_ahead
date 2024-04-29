@@ -40,7 +40,7 @@ class CarStateMachine:
             {'trigger': 'register', 'source': 'disconnected', 'target': 'in_queue', 'effect': 'register_for_queue'},
             {'trigger': 'assigned_charger', 'source': 'disconnected', 'target': 'assigned'},
             {'trigger': 'register', 'source': 'in_queue', 'target': 'disconnected', 'effect': 'unregister_from_queue'},
-            {'trigger': 'charger_connected', 'source': 'in_queue', 'target': 'charging', 'effect': 'charger_connected'},
+            {'trigger': 'charger_connected', 'source': 'in_queue', 'target': 'charging'},
             {'trigger': 'charger_disconnected', 'source': 'charging', 'target': 'disconnected'},
         ]
 
@@ -79,15 +79,6 @@ class CarStateMachine:
 
         else:
             self._logger.warning('Unknown command: {}'.format(command))
-
-    def charger_connected(self):
-        print('Starting charging')
-        data = {
-            'command': 'charger_connected',
-            'charger_id': self.charger_id,
-            'station_id': 1,
-        }
-        self.client.publish(MQTT_TOPIC_SERVER_INPUT, json.dumps(data))
         
     def charger_disconnecd(self):
         print('Disconnecting')

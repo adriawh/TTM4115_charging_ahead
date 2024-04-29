@@ -44,7 +44,7 @@ class charger_logic:
         GPIO.setup(green, GPIO.OUT)
         
         GPIO.setup(service_button, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-        GPIO.add_event_detect(service_button, GPIO.FALLING, callback=self.button, bouncetime=100)
+        GPIO.add_event_detect(service_button, GPIO.FALLING, callback=self.button, bouncetime=500)
         
         GPIO.setup(charger_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         GPIO.add_event_detect(charger_pin, GPIO.BOTH, callback=self.charger, bouncetime=500)
@@ -60,8 +60,8 @@ class charger_logic:
             {'trigger': 'server_book', 'source': 'waiting', 'target': 'booked', 'effect': 'booked'},
             {'trigger': 'charger_connected', 'source': 'booked', 'target': 'in_use', 'effect': 'charger_connected'},
             {'trigger': 'charger_disconnected', 'source': 'in_use', 'target': 'waiting', 'effect': 'waiting'},
-            {'trigger': 'failure', 'source': 'in_use', 'target': 'out_of_order', 'effect': 'out_of_order'},
-            {'trigger': 'failure', 'source': 'booked', 'target': 'out_of_order', 'effect': 'out_of_order'},
+            {'trigger': 'button', 'source': 'in_use', 'target': 'out_of_order', 'effect': 'out_of_order'},
+            {'trigger': 'button', 'source': 'booked', 'target': 'out_of_order', 'effect': 'out_of_order'},
         ]
 
         self.stm = stmpy.Machine(name=self.id, transitions=transitions, obj=self)
