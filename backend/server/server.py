@@ -76,7 +76,6 @@ class Server:
             if command == 'status_available_charger':
                 data = self.get_available_chargers(payload)
                 self.publish_command(data)
-                print("Finished publishing")
 
             elif command == 'register_to_queue':
                 data = self.register_to_queue(payload)
@@ -168,9 +167,17 @@ class Server:
         car_id = payload.get('car_id')
         station = self.stations.get(payload.get('station_id'))
 
+        # If the element is assigned to a charger, remove it
+        for charger in station.chargers.values():
+            if charger.car_id == car_id:
+                charger.car_id = None
+                charger.charging = False
+                charger.assigned = False
+
+        # If the element is in the queue, remove it
         station.remove_element(car_id)
 
-        self._logger.debug(f'car {car_id} is now removed from queue')
+        self._logger.debug(f'car {car_id} is now removed')
 
     def charger_connected(self, payload):
         charger_id = payload.get('charger_id')
@@ -223,13 +230,12 @@ class Server:
         charger.operational = False
 
     def update_dashboard(self, station_id):
-        print('updating dashboard')
-        print(self.stations)
         station = self.stations.get(int(station_id))
-        print("STATION", station)
+
         chargers = [charger.serialize() for charger in station.chargers.values()]
         dashboard_update = {
             'id': station.id,
+            'stationName': station.station_name,
             'availableChargers':  self.get_num_available_chargers(station.id),
             'unavailableChargers': station.unavailable_chargers,
             'queue': list(station.queue),
@@ -244,6 +250,7 @@ class Server:
             chargers = [charger.serialize() for charger in station.chargers.values()]
             dashboard_update = {
                 'id': station.id,
+                'stationName': station.station_name,
                 'availableChargers': self.get_num_available_chargers(station.id),
                 'unavailableChargers': station.unavailable_chargers,
                 'queue': list(station.queue),

@@ -2,6 +2,7 @@
 
 export type StationDetails = {
     id: string
+    stationName: string,
     availableChargers: number,
     unavailableChargers: number,
     queue: string[],
