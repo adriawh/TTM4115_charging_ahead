@@ -30,6 +30,7 @@ export type StationData = {
     id: string;
     name: string;
     availableChargers: number;
+    chargers: Charger[]
     queue: string[];
 }
 

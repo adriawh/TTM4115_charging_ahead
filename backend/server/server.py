@@ -101,39 +101,28 @@ class Server:
 
     def get_available_chargers(self, payload):
         search_string = payload.get('search_string', '').lower()
-        data = {'command': 'available_chargers', 'message': 'No matching station or area found.'}
-
-        for station in self.stations.values():
-            if search_string in station.station_name.lower():
-                num_available = self.get_num_available_chargers(station.id)
-                data = {
-                    'command': 'available_chargers',
-                    'stations': [{
-                        'id': station.id,
-                        'name': station.station_name,
-                        'availableChargers': num_available,
-                        'queue': list(station.queue)
-                    }]
-                }
-                return data
-
         matching_stations = []
+
         for station in self.stations.values():
-            if search_string in station.area_name.lower() and self.get_num_available_chargers(station.id) > 0:
+            if search_string in station.station_name.lower() or search_string in station.area_name.lower():
                 matching_stations.append({
                     'id': station.id,
                     'name': station.station_name,
                     'availableChargers': self.get_num_available_chargers(station.id),
-                    'queue': list(station.queue)
+                    'queue': list(station.queue),
+                    'chargers': [charger.serialize() for charger in station.chargers.values()]
                 })
 
         if matching_stations:
-            data = {
+            return {
                 'command': 'available_chargers',
                 'stations': matching_stations
             }
-
-        return data
+        else:
+            return {
+                'command': 'available_chargers',
+                'message': 'No matching station or area found.'
+            }
 
     def register_to_queue(self, payload):
         car_id = payload.get('car_id')
