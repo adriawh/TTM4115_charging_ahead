@@ -10,26 +10,22 @@ type StationSearchProps = {
 
 }
 export default function StationSearch(props: StationSearchProps) {
+    const { station, publishCommand } = props;
 
-    const {station, publishCommand} = props
-
-     const registerToQueue = () => {
+    const registerToQueue = () => {
         const carId = generateRandomId();
         const command = { command: "register_to_queue", station_id: station.id, car_id: carId };
-        props.publishCommand(command);
-        const chargerCommand = { command: "status_available_charger", station_id: station.id, car_id: carId };
+        publishCommand(command);
     };
 
-
-     function generateRandomId() {
-         const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-         let result = '';
-         for (let i = 0; i < 10; i++) {
-             result += characters.charAt(Math.floor(Math.random() * characters.length));
-         }
-         return result;
-     }
-
+    function generateRandomId() {
+        const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+        let result = '';
+        for (let i = 0; i < 10; i++) {
+            result += characters.charAt(Math.floor(Math.random() * characters.length));
+        }
+        return result;
+    }
 
     return (
         <div className="flex flex-col border border-gray-300 rounded-md shadow-sm p-4 w-80">
@@ -37,10 +33,14 @@ export default function StationSearch(props: StationSearchProps) {
                 <div className="mb-5">
                     <p className="text-lg font-semibold">{station.name}</p>
                 </div>
-                <div className="text-lg mb-20 items-center flex text-center">
-                     <Button onClick={registerToQueue} className="ml-2 flex text-center items-centerr">
-                        Add to queue
-                    </Button>
+                <div className="mb-20 items-center flex text-center">
+                      <Button
+                          icon={<PlugZap2 height={18} width={18} />}
+                          onClick={registerToQueue}
+                          style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                      >
+                          Add to queue
+                      </Button>
                 </div>
             </div>
             <div className="flex flex-col gap-2">
@@ -57,5 +57,4 @@ export default function StationSearch(props: StationSearchProps) {
             </div>
         </div>
     );
-
 }
