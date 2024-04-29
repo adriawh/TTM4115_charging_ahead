@@ -2,6 +2,7 @@
 
 export type StationDetails = {
     id: string
+    stationName: string,
     availableChargers: number,
     unavailableChargers: number,
     queue: string[],
@@ -29,6 +30,7 @@ export type StationData = {
     id: string;
     name: string;
     availableChargers: number;
+    chargers: Charger[]
     queue: string[];
 }
 

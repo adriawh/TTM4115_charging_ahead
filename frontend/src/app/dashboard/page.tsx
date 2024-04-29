@@ -8,6 +8,9 @@ import StationDetailsCard from "@/components/station-details-card";
 export default function Dashboard() {
     const [data, setData] = useState<StationDetails[]>();
 
+    console.log("STATE", data)
+    console.log("quueue", data?.[0]?.queue)
+
     useEffect(() => {
         const client = mqtt.connect('ws://broker.hivemq.com:8000/mqtt');
 
@@ -53,6 +56,7 @@ export default function Dashboard() {
     function convertStationData(station: StationDetails) {
         return {
             id: station.id,
+            stationName: station.stationName,
             availableChargers: station.availableChargers,
             unavailableChargers: station.unavailableChargers,
             queue: station.queue,

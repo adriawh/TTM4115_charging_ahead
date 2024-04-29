@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import mqtt from 'mqtt';
 import {Station} from "@/lib/types";
 import StationSearch from "@/components/station-search";
-import { Button, Input } from 'antd';
+import { Input,  Empty } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 
 
@@ -17,6 +17,8 @@ export default function Console() {
     const [client, setClient] = useState<mqtt.MqttClient>();
     const [stations, setStations] = useState<Station>();
 
+    console.log("Stations", stations)
+
     useEffect(() => {
         const connectUrl = `ws://${MQTT_BROKER}:${MQTT_PORT}/mqtt`;
         const client = mqtt.connect(connectUrl);
@@ -27,6 +29,8 @@ export default function Console() {
 
         client.on('message', (topic, payload) => {
             const message = JSON.parse(payload.toString());
+
+            console.log("Data fra server", message)
 
             if (message.command === 'available_chargers') {
                 setStations(message);
@@ -47,11 +51,6 @@ export default function Console() {
         }
     };
 
-    const handleQueue = () => {
-        const carId = generateRandomId();
-        const command = { command: "register_to_queue", station_id: 1, car_id: carId };
-        publishCommand(command);
-    };
 
     const handleChargerStatus = (searchString: string) => {
         const command = { command: "status_available_charger", search_string: searchString };
@@ -64,9 +63,6 @@ export default function Console() {
             <div className="w-full max-w-6xl p-5">
                 <div className="mb-32">
                     <h1 className="font-bold text-3xl text-center">Car Interface</h1>
-                </div>
-                <div className="text-lg mb-20 items-center">
-                    <Button onClick={handleQueue}>Add a Car to Queue</Button>
                 </div>
                 <div className="flex flex-col">
                     <div className="mb-8">
@@ -84,10 +80,10 @@ export default function Console() {
                         {stations?.stations ? (
                             <div className="flex flex-col gap-7 items-center">
                                 {stations.stations.map((station, index) => (
-                                    <StationSearch key={index} station={station}/>
+                                    <StationSearch key={index} station={station} publishCommand={publishCommand} />
                                 ))}
                             </div>
-                        ) : <p> No matching station or area found...</p>
+                        ) : <Empty/>
                         }
                     </div>
                 </div>
@@ -96,11 +92,3 @@ export default function Console() {
     );
 }
 
-function generateRandomId() {
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let result = '';
-    for (let i = 0; i < 10; i++) {
-        result += characters.charAt(Math.floor(Math.random() * characters.length));
-    }
-    return result;
-}

@@ -17,7 +17,7 @@ class Station:
 
     def init_chargers(self):
         chargers = dict()
-        for i in range(self.num_chargers):
+        for i in range(1, self.num_chargers+1):
             chargers.update({i: Charger(i)})
 
         return chargers
@@ -34,6 +34,6 @@ class Station:
         for item in self.queue:
             if item == element and not removed:
                 removed = True
-                continue
-            new_dq.append(item)
-        return new_dq
+            else:
+                new_dq.append(item)
+        self.queue = new_dq
