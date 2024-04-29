@@ -41,9 +41,7 @@ class CarStateMachine:
             {'trigger': 'assigned_charger', 'source': 'disconnected', 'target': 'assigned'},
             {'trigger': 'register', 'source': 'in_queue', 'target': 'disconnected', 'effect': 'unregister_from_queue'},
             {'trigger': 'charger_connected', 'source': 'in_queue', 'target': 'charging', 'effect': 'charger_connected'},
-            {'trigger': 'charger_disconnected', 'source': 'charge_complete', 'target': 'disconnected', 'effect': 'disconnect'},
             {'trigger': 'charger_disconnected', 'source': 'charging', 'target': 'disconnected'},
-            {'trigger': 'charge_complete', 'source': 'charging', 'target': 'charge_complete', 'effect': 'stop_charging'}
         ]
 
         self.stm = stmpy.Machine(name=self.id, transitions=transitions, obj=self)
@@ -55,7 +53,6 @@ class CarStateMachine:
         GPIO.setup(register_button, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         GPIO.add_event_detect(register_button, GPIO.FALLING, callback=self.button_press, bouncetime=500)
 
-        
         
         GPIO.setup(charger_pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         GPIO.add_event_detect(charger_pin, GPIO.BOTH, callback=self.charger, bouncetime=500)
